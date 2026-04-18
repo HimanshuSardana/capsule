@@ -36,7 +36,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	binaries := []string{"/usr/sbin/bash", "/usr/sbin/ls", "/usr/sbin/cat"}
+	binaries := []string{"/usr/sbin/bash", "/usr/sbin/ls", "/usr/sbin/cat", "/usr/sbin/python3", "/usr/sbin/clear"}
 	copiedLibs := make(map[string]bool)
 
 	for _, bin := range binaries {
