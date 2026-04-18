@@ -13,11 +13,11 @@ import (
 var logFile *os.File
 
 func main() {
-	log("Starting capsule")
+	// log("Starting capsule")
 
 	rootfs := "/tmp/rootfs"
 
-	log("Removing rootfs: %v", os.RemoveAll(rootfs))
+	// log("Removing rootfs: %v", os.RemoveAll(rootfs))
 	if err := os.MkdirAll(rootfs, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create rootfs: %v\n", err)
 		os.Exit(1)
@@ -36,32 +36,58 @@ func main() {
 		os.Exit(1)
 	}
 
-	binaries := []string{"/usr/sbin/bash", "/usr/sbin/ls", "/usr/sbin/cat", "/usr/sbin/python3", "/usr/sbin/clear"}
+	binaries := []string{"/usr/sbin/bash", "/usr/sbin/ls", "/usr/sbin/cat", "/usr/sbin/vim"}
+	requiredFiles := []string{"/etc", "/etc/passwd", "/etc/group", "/etc/hosts", "/etc/hostname", "/home", "/usr/bin/python3.14"}
 	copiedLibs := make(map[string]bool)
 
+	for _, req := range requiredFiles {
+		src := req
+		dst := rootfs + req
+		if req == "/home" {
+			if err := os.MkdirAll(dst, 0o755); err != nil {
+				// log("mkdir %s: %v", dst, err)
+			}
+			continue
+		}
+		info, err := os.Stat(src)
+		if err != nil {
+			// log("stat %s: %v", src, err)
+			continue
+		}
+		if info.IsDir() {
+			if err := os.MkdirAll(dst, 0o755); err != nil {
+				// log("mkdir %s: %v", dst, err)
+			}
+		} else {
+			if err := copyFile(src, dst); err != nil {
+				// log("copy %s: %v", src, err)
+			}
+		}
+	}
+
 	for _, bin := range binaries {
-		log("Copying binary: %s -> %s", bin, rootfs+bin)
+		// log("Copying binary: %s -> %s", bin, rootfs+bin)
 		if err := copyFile(bin, rootfs+bin); err != nil {
-			log("failed to copy %s: %v", bin, err)
+			// log("failed to copy %s: %v", bin, err)
 			os.Exit(1)
 		}
 
 		output, err := exec.Command("ldd", bin).Output()
 		if err != nil {
-			log("ldd failed for %s: %v", bin, err)
+			// log("ldd failed for %s: %v", bin, err)
 			os.Exit(1)
 		}
 
-		log("ldd output for %s:\n%s", bin, string(output))
+		// log("ldd output for %s:\n%s", bin, string(output))
 
 		libs := parseLdd(string(output))
-		log("Parsed libs for %s: %v", bin, libs)
+		// log("Parsed libs for %s: %v", bin, libs)
 		for _, lib := range libs {
 			if !copiedLibs[lib] {
 				copiedLibs[lib] = true
-				log("Copying lib: %s -> %s", lib, rootfs+lib)
+				// log("Copying lib: %s -> %s", lib, rootfs+lib)
 				if err := copyFile(lib, rootfs+lib); err != nil {
-					log("failed to copy %s: %v", lib, err)
+					// log("failed to copy %s: %v", lib, err)
 					os.Exit(1)
 				}
 			}
@@ -79,30 +105,30 @@ func main() {
 
 	os.RemoveAll(rootfs + "/lib")
 	if err := os.Symlink("usr/lib", rootfs+"/lib"); err != nil {
-		log("symlink lib: %v", err)
+		// log("symlink lib: %v", err)
 	} else {
-		log("symlink created: /lib -> usr/lib")
+		// log("symlink created: /lib -> usr/lib")
 	}
 
 	os.RemoveAll(rootfs + "/lib64")
 	if err := os.Symlink("usr/lib64", rootfs+"/lib64"); err != nil {
-		log("symlink lib64: %v", err)
+		// log("symlink lib64: %v", err)
 	} else {
-		log("symlink created: /lib64 -> usr/lib64")
+		// log("symlink created: /lib64 -> usr/lib64")
 	}
 
 	os.RemoveAll(rootfs + "/bin")
 	if err := os.Symlink("usr/sbin", rootfs+"/bin"); err != nil {
-		log("symlink bin: %v", err)
+		// log("symlink bin: %v", err)
 	} else {
-		log("symlink created: /bin -> usr/sbin")
+		// log("symlink created: /bin -> usr/sbin")
 	}
 
 	os.RemoveAll(rootfs + "/usr/bin")
 	if err := os.Symlink("../usr/sbin", rootfs+"/usr/bin"); err != nil {
-		log("symlink usr/bin: %v", err)
+		// log("symlink usr/bin: %v", err)
 	} else {
-		log("symlink created: /usr/bin -> usr/sbin")
+		// log("symlink created: /usr/bin -> usr/sbin")
 	}
 
 	if err := syscall.Chroot(rootfs); err != nil {
@@ -115,18 +141,19 @@ func main() {
 		os.Exit(1)
 	}
 
-	testCmd := exec.Command("/usr/sbin/ls", "-la", ".")
-	testCmd.Stdin = os.Stdin
-	testCmd.Stdout = os.Stdout
-	testCmd.Stderr = os.Stderr
+	// testCmd := exec.Command("/usr/sbin/ls", "-la", ".")
+	// testCmd.Stdin = os.Stdin
+	// testCmd.Stdout = os.Stdout
+	// testCmd.Stderr = os.Stderr
 
-	log("Testing ls inside chroot...")
-	if err := testCmd.Run(); err != nil {
-		log("ls test failed: %v", err)
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log("ls stderr: %s", string(exitErr.Stderr))
-		}
-	}
+	// log("Testing ls inside chroot...")
+	// if err := testCmd.Run(); err != nil {
+	// 	// log("ls test failed: %v", err)
+	// 	if exitErr, ok := err.(*exec.ExitError); ok {
+	// 		// log("ls stderr: %s", string(exitErr.Stderr))
+	// 		fmt.Fprintf(os.Stderr, "ls test failed: %v\n", exitErr)
+	// 	}
+	// }
 
 	cmd := exec.Command("/usr/sbin/bash")
 	cmd.Stdin = os.Stdin
@@ -143,7 +170,7 @@ func main() {
 }
 
 func copyFile(src, dst string) error {
-	log("copyFile: %s -> %s", src, dst)
+	// log("copyFile: %s -> %s", src, dst)
 
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
 		return fmt.Errorf("mkdir failed: %v", err)
@@ -174,13 +201,13 @@ func copyFile(src, dst string) error {
 		return fmt.Errorf("chmod: %v", err)
 	}
 
-	log("copyFile success: %s", dst)
+	// log("copyFile success: %s", dst)
 	return nil
 }
 
-func log(format string, args ...interface{}) {
-	fmt.Println(fmt.Sprintf(format, args...))
-}
+// func log(format string, args ...interface{}) {
+// 	fmt.Println(fmt.Sprintf(format, args...))
+// }
 
 func parseLdd(output string) []string {
 	lines := strings.Split(output, "\n")
