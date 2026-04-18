@@ -13,8 +13,21 @@ func main() {
 	rootfs := "/tmp/rootfs"
 
 	os.RemoveAll(rootfs)
-	if err := os.MkdirAll(rootfs, 0755); err != nil {
+	if err := os.MkdirAll(rootfs, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create rootfs: %v\n", err)
+		os.Exit(1)
+	}
+
+	if err := os.MkdirAll(rootfs+"/usr/sbin", 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create /usr/sbin: %v\n", err)
+		os.Exit(1)
+	}
+	if err := os.MkdirAll(rootfs+"/usr/lib", 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create /usr/lib: %v\n", err)
+		os.Exit(1)
+	}
+	if err := os.MkdirAll(rootfs+"/usr/lib64", 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create /lib64: %v\n", err)
 		os.Exit(1)
 	}
 
@@ -30,19 +43,26 @@ func main() {
 		"/usr/lib/libncursesw.so.6":       "/usr/lib/libncursesw.so.6",
 		"/usr/lib64/ld-linux-x86-64.so.2": "/lib64/ld-linux-x86-64.so.2",
 	}
-	for _, lib := range libs {
-		dest := rootfs + filepath.ToSlash(filepath.Join("/", filepath.Base(lib)))
-		if err := copyFile(lib, dest); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to copy %s: %v\n", lib, err)
+
+	for src, dstPath := range libs {
+		dest := filepath.Join(rootfs, dstPath)
+
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "mkdir failed: %v\n", err)
+			os.Exit(1)
+		}
+
+		if err := copyFile(src, dest); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to copy %s: %v\n", src, err)
 			os.Exit(1)
 		}
 	}
 
-	if err := os.MkdirAll(rootfs+"/lib", 0755); err != nil {
+	if err := os.MkdirAll(rootfs+"/lib", 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create lib: %v\n", err)
 		os.Exit(1)
 	}
-	if err := os.MkdirAll(rootfs+"/lib64", 0755); err != nil {
+	if err := os.MkdirAll(rootfs+"/lib64", 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create lib64: %v\n", err)
 		os.Exit(1)
 	}
@@ -92,3 +112,4 @@ func copyFile(src, dst string) error {
 
 	return os.Chmod(dst, srcInfo.Mode())
 }
+
