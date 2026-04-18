@@ -15,7 +15,7 @@ var logFile *os.File
 func main() {
 	// log("Starting capsule")
 
-	rootfs := "/tmp/rootfs"
+	rootfs := "/home/himanshu/personal/projects/capsule/testenv"
 
 	// log("Removing rootfs: %v", os.RemoveAll(rootfs))
 	if err := os.MkdirAll(rootfs, 0o755); err != nil {
@@ -27,6 +27,17 @@ func main() {
 		fmt.Fprintf(os.Stderr, "failed to create /usr/sbin: %v\n", err)
 		os.Exit(1)
 	}
+	if err := os.MkdirAll(rootfs+"/proc", 0o755); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to create /usr/sbin: %v\n", err)
+		os.Exit(1)
+	}
+
+	// mount proc
+	if err := syscall.Mount("proc", rootfs+"/proc", "proc", 0, ""); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to mount /proc: %v\n", err)
+		os.Exit(1)
+	}
+
 	if err := os.MkdirAll(rootfs+"/usr/lib", 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create /usr/lib: %v\n", err)
 		os.Exit(1)
@@ -36,7 +47,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	binaries := []string{"/usr/sbin/bash", "/usr/sbin/ls", "/usr/sbin/cat", "/usr/sbin/vim"}
+	binaries := []string{"/usr/sbin/bash", "/usr/sbin/ls", "/usr/sbin/cat", "/usr/sbin/vim", "/usr/sbin/ps"}
 	requiredFiles := []string{"/etc", "/etc/passwd", "/etc/group", "/etc/hosts", "/etc/hostname", "/home", "/usr/bin/python3.14"}
 	copiedLibs := make(map[string]bool)
 
