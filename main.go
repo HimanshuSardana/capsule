@@ -24,11 +24,11 @@ func main() {
 		os.Exit(1)
 	}
 
-	libs := []string{
-		"/usr/lib/libreadline.so.8",
-		"/usr/lib/libc.so.6",
-		"/usr/lib/libncursesw.so.6",
-		"/usr/lib64/ld-linux-x86-64.so.2",
+	libs := map[string]string{
+		"/usr/lib/libreadline.so.8":       "/usr/lib/libreadline.so.8",
+		"/usr/lib/libc.so.6":              "/usr/lib/libc.so.6",
+		"/usr/lib/libncursesw.so.6":       "/usr/lib/libncursesw.so.6",
+		"/usr/lib64/ld-linux-x86-64.so.2": "/lib64/ld-linux-x86-64.so.2",
 	}
 	for _, lib := range libs {
 		dest := rootfs + filepath.ToSlash(filepath.Join("/", filepath.Base(lib)))
