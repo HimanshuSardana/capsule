@@ -56,6 +56,18 @@ func main() {
 			fmt.Fprintf(os.Stderr, "failed to copy %s: %v\n", src, err)
 			os.Exit(1)
 		}
+		libs := parseLdd(string(output))
+		fmt.Printf("Parsed libs for %s: %v\n", bin, libs)
+		for _, lib := range libs {
+			if !copiedLibs[lib] {
+				copiedLibs[lib] = true
+				fmt.Printf("Copying lib: %s -> %s\n", lib, rootfs+lib)
+				if err := copyFile(lib, rootfs+lib); err != nil {
+					fmt.Fprintf(os.Stderr, "failed to copy %s: %v\n", lib, err)
+					os.Exit(1)
+				}
+			}
+		}
 	}
 
 	if err := os.MkdirAll(rootfs+"/lib", 0o755); err != nil {
@@ -113,3 +125,21 @@ func copyFile(src, dst string) error {
 	return os.Chmod(dst, srcInfo.Mode())
 }
 
+func parseLdd(output string) []string {
+	lines := strings.Split(output, "\n")
+	libs := []string{}
+
+	for _, line := range lines {
+		parts := strings.Split(line, "=>")
+		if len(parts) != 2 {
+			continue
+		}
+
+		path := strings.TrimSpace(strings.Split(parts[1], "(")[0])
+		if strings.HasPrefix(path, "/") {
+			libs = append(libs, path)
+		}
+	}
+
+	return libs
+}
