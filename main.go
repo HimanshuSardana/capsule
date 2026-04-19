@@ -65,13 +65,11 @@ func runChild() {
 	cmd.Stderr = os.Stderr
 	if err := cmd.Run(); err != nil {
 		fmt.Printf("Error running shell: %v\n", err)
-		fmt.Printf("Stderr: %v\n", err)
-	}
-
-	fmt.Println("No shell found! Contents of /bin:")
-	files, _ := os.ReadDir("/bin")
-	for _, f := range files {
-		fmt.Println("  -", f.Name())
+		fmt.Println("Contents of /bin:")
+		files, _ := os.ReadDir("/bin")
+		for _, f := range files {
+			fmt.Println("  -", f.Name())
+		}
 	}
 }
 
