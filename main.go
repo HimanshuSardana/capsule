@@ -2,147 +2,107 @@ package main
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 	"syscall"
+	_ "time"
 )
 
 func main() {
-	rootfs := "/home/himanshu/personal/projects/capsule/testenv"
-
-	if err := os.MkdirAll(rootfs, 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create rootfs: %v\n", err)
-		os.Exit(1)
+	if len(os.Args) > 1 && os.Args[1] == "child" {
+		runChild()
+		return
 	}
 
-	dirs := []string{"/usr/sbin", "/usr/lib", "/usr/lib64", "/proc", "/lib", "/lib64", "/bin", "/usr/bin", "/etc", "/home"}
-	for _, d := range dirs {
-		if err := os.MkdirAll(rootfs+d, 0o755); err != nil {
-			fmt.Fprintf(os.Stderr, "mkdir %s: %v\n", d, err)
-			os.Exit(1)
-		}
-	}
+	runParent()
+}
 
-	binaries := []string{"/usr/sbin/bash", "/usr/sbin/ls", "/usr/sbin/cat", "/usr/sbin/vim", "/usr/sbin/ps"}
-	requiredFiles := []string{"/etc/passwd", "/etc/group", "/etc/hosts", "/etc/hostname"}
+func runParent() {
+	fmt.Println("Parent: Starting container...")
 
-	copiedLibs := make(map[string]bool)
-
-	for _, req := range requiredFiles {
-		if err := copyFile(req, rootfs+req); err != nil {
-			fmt.Fprintf(os.Stderr, "copy %s: %v\n", req, err)
-		}
-	}
-
-	for _, bin := range binaries {
-		if err := copyFile(bin, rootfs+bin); err != nil {
-			fmt.Fprintf(os.Stderr, "copy binary %s: %v\n", bin, err)
-			os.Exit(1)
-		}
-
-		output, err := exec.Command("ldd", bin).Output()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "ldd %s: %v\n", bin, err)
-			continue
-		}
-
-		for _, lib := range parseLdd(string(output)) {
-			if !copiedLibs[lib] {
-				copiedLibs[lib] = true
-				if err := copyFile(lib, rootfs+lib); err != nil {
-					fmt.Fprintf(os.Stderr, "copy lib %s: %v\n", lib, err)
-				}
-			}
-		}
-	}
-
-	symlinks := map[string]string{
-		rootfs + "/lib":     "usr/lib",
-		rootfs + "/lib64":   "usr/lib64",
-		rootfs + "/bin":     "usr/sbin",
-		rootfs + "/usr/bin": "../usr/sbin",
-	}
-	for dst, target := range symlinks {
-		os.RemoveAll(dst)
-		if err := os.Symlink(target, dst); err != nil {
-			fmt.Fprintf(os.Stderr, "symlink %s -> %s: %v\n", dst, target, err)
-		}
-	}
-
-	cmd := exec.Command("/usr/sbin/bash", "--noprofile", "--norc")
-
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	cmd.Dir = "/"
-
+	// Set the necessary flags for creating namespaces
+	cmd := exec.Command("/proc/self/exe", "child")
 	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWUTS,
+		Cloneflags: syscall.CLONE_NEWPID | syscall.CLONE_NEWUTS | syscall.CLONE_NEWNS, // New PID, UTS, and Mount namespace
 	}
 
-	setup := fmt.Sprintf(`
-		mount -t proc proc /proc || echo "proc mount failed"
-		chroot %s /usr/sbin/bash --noprofile --norc
-	`, rootfs)
-
-	cmd = exec.Command("/usr/sbin/bash", "-c", setup)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWUTS,
-	}
-
+	// Inherit the standard input/output/error to interact with the child process
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
-	fmt.Println("Starting container (bash should be PID 1 inside)...")
+	// Run the command
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "container failed: %v\n", err)
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			fmt.Fprintf(os.Stderr, "exit status: %d\n", exitErr.ExitCode())
-		}
+		fmt.Printf("Error starting child process: %v\n", err)
 		os.Exit(1)
 	}
 }
 
-func copyFile(src, dst string) error {
-	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return err
-	}
-	srcFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
+func runChild() {
+	fmt.Println("Child: Inside container (PID namespace)")
 
-	dstFile, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer dstFile.Close()
-
-	if _, err := io.Copy(dstFile, srcFile); err != nil {
-		return err
+	// Chroot into the Alpine rootfs
+	if err := syscall.Chroot("./testenv"); err != nil {
+		fmt.Printf("Chroot failed: %v\n", err)
+		os.Exit(1)
 	}
 
-	if info, err := srcFile.Stat(); err == nil {
-		os.Chmod(dst, info.Mode())
+	if err := os.Chdir("/"); err != nil {
+		fmt.Printf("Chdir / failed: %v\n", err)
+		os.Exit(1)
 	}
-	return nil
+
+	// Mount necessary filesystems
+	setupMounts()
+
+	// Explicitly setting the PATH environment variable
+	os.Setenv("PATH", "/bin:/usr/bin:/sbin:/usr/sbin")
+
+	// Try using busybox directly (symlinks break after chroot due to absolute paths)
+	cmd := exec.Command("/bin/busybox", "sh")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		fmt.Printf("Error running shell: %v\n", err)
+		fmt.Printf("Stderr: %v\n", err)
+	}
+
+	fmt.Println("No shell found! Contents of /bin:")
+	files, _ := os.ReadDir("/bin")
+	for _, f := range files {
+		fmt.Println("  -", f.Name())
+	}
 }
 
-func parseLdd(output string) []string {
-	lines := strings.Split(output, "\n")
-	libs := []string{}
-	for _, line := range lines {
-		if idx := strings.Index(line, "=>"); idx != -1 {
-			part := strings.TrimSpace(strings.Split(line[idx+2:], "(")[0])
-			if strings.HasPrefix(part, "/") {
-				libs = append(libs, part)
-			}
-		}
+func setupMounts() {
+	syscall.Mount("", "", "", uintptr(syscall.MS_PRIVATE|syscall.MS_REC), "")
+
+	_ = os.MkdirAll("/proc", 0o755)
+	if err := syscall.Mount("proc", "/proc", "proc", 0, ""); err != nil {
+		fmt.Printf("Failed to mount /proc: %v\n", err)
 	}
-	return libs
+
+	_ = os.MkdirAll("/dev", 0o755)
+	if err := syscall.Mount("devtmpfs", "/dev", "devtmpfs", 0, ""); err != nil {
+		fmt.Printf("Failed to mount /dev: %v\n", err)
+	}
+
+	_ = os.MkdirAll("/sys", 0o755)
+	if err := syscall.Mount("sysfs", "/sys", "sysfs", 0, ""); err != nil {
+		fmt.Printf("Failed to mount /sys: %v\n", err)
+	}
+
+	_ = os.MkdirAll("/dev/pts", 0o755)
+	if err := syscall.Mount("devpts", "/dev/pts", "devpts", 0, ""); err != nil {
+		fmt.Printf("Failed to mount /dev/pts: %v\n", err)
+	}
+}
+
+func getHostname() string {
+	hostname, err := os.Hostname()
+	if err != nil {
+		return "unknown"
+	}
+	return hostname
 }
