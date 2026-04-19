@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"syscall"
+	"time"
 )
 
 type Image struct {
@@ -157,12 +158,15 @@ func extractTarGz(tarPath, dest string) error {
 }
 
 func runContainer(rootfs string) {
-	fmt.Println("Parent: Starting container...")
+	timeStart := time.Now()
+	// fmt.Println("Parent: Starting container...")
 
 	cmd := exec.Command("/proc/self/exe", "child", rootfs)
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Cloneflags: syscall.CLONE_NEWPID | syscall.CLONE_NEWUTS | syscall.CLONE_NEWNS,
 	}
+	duration := time.Since(timeStart)
+	fmt.Printf("Container started in %v\n", duration)
 
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
@@ -175,7 +179,7 @@ func runContainer(rootfs string) {
 }
 
 func runChild(rootfs string) {
-	fmt.Println("Child: Inside container (PID namespace)")
+	// fmt.Println("Child: Inside container (PID namespace)")
 
 	if err := syscall.Chroot(rootfs); err != nil {
 		fmt.Printf("Chroot failed: %v\n", err)
@@ -221,15 +225,15 @@ func setupMounts() {
 		fmt.Printf("Failed to mount /proc: %v\n", err)
 	}
 
-	_ = os.MkdirAll("/dev", 0o755)
-	if err := syscall.Mount("devtmpfs", "/dev", "devtmpfs", 0, ""); err != nil {
-		fmt.Printf("Failed to mount /dev: %v\n", err)
-	}
-
-	_ = os.MkdirAll("/sys", 0o755)
-	if err := syscall.Mount("sysfs", "/sys", "sysfs", 0, ""); err != nil {
-		fmt.Printf("Failed to mount /sys: %v\n", err)
-	}
+	// _ = os.MkdirAll("/dev", 0o755)
+	// if err := syscall.Mount("devtmpfs", "/dev", "devtmpfs", 0, ""); err != nil {
+	// 	fmt.Printf("Failed to mount /dev: %v\n", err)
+	// }
+	//
+	// _ = os.MkdirAll("/sys", 0o755)
+	// if err := syscall.Mount("sysfs", "/sys", "sysfs", 0, ""); err != nil {
+	// 	fmt.Printf("Failed to mount /sys: %v\n", err)
+	// }
 
 	_ = os.MkdirAll("/dev/pts", 0o755)
 	if err := syscall.Mount("devpts", "/dev/pts", "devpts", 0, ""); err != nil {
