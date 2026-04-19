@@ -80,7 +80,7 @@ func runImage(imageName, dir string) {
 		dir = abs
 	}
 
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		fmt.Printf("Error creating directory: %v\n", err)
 		os.Exit(1)
 	}
@@ -133,7 +133,7 @@ func downloadImage(url, path string) error {
 		return fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	os.MkdirAll(filepath.Dir(path), 0755)
+	os.MkdirAll(filepath.Dir(path), 0o755)
 	out, err := os.Create(path)
 	if err != nil {
 		return err
@@ -182,6 +182,11 @@ func runChild(rootfs string) {
 		os.Exit(1)
 	}
 
+	if err := syscall.Sethostname([]byte("capsule")); err != nil {
+		fmt.Printf("Sethostname failed: %v\n", err)
+		os.Exit(1)
+	}
+
 	if err := os.Chdir("/"); err != nil {
 		fmt.Printf("Chdir / failed: %v\n", err)
 		os.Exit(1)
@@ -191,7 +196,15 @@ func runChild(rootfs string) {
 
 	os.Setenv("PATH", "/bin:/usr/bin:/sbin:/usr/sbin")
 
-	cmd := exec.Command("/bin/busybox", "sh")
+	cmd := exec.Command("sh", "-c", "echo 'nameserver 8.8.8.8' > /etc/resolv.conf")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		fmt.Printf("Error setting resolv.conf: %v\n", err)
+	}
+
+	cmd = exec.Command("/bin/busybox", "sh")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
