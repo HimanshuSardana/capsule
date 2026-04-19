@@ -10,231 +10,139 @@ import (
 	"syscall"
 )
 
-var logFile *os.File
-
 func main() {
-	// log("Starting capsule")
-
 	rootfs := "/home/himanshu/personal/projects/capsule/testenv"
 
-	// log("Removing rootfs: %v", os.RemoveAll(rootfs))
 	if err := os.MkdirAll(rootfs, 0o755); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to create rootfs: %v\n", err)
 		os.Exit(1)
 	}
 
-	if err := os.MkdirAll(rootfs+"/usr/sbin", 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create /usr/sbin: %v\n", err)
-		os.Exit(1)
-	}
-	if err := os.MkdirAll(rootfs+"/proc", 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create /usr/sbin: %v\n", err)
-		os.Exit(1)
-	}
-
-	// mount proc
-	if err := syscall.Mount("proc", rootfs+"/proc", "proc", 0, ""); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to mount /proc: %v\n", err)
-		os.Exit(1)
-	}
-
-	if err := os.MkdirAll(rootfs+"/usr/lib", 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create /usr/lib: %v\n", err)
-		os.Exit(1)
-	}
-	if err := os.MkdirAll(rootfs+"/usr/lib64", 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create /lib64: %v\n", err)
-		os.Exit(1)
+	dirs := []string{"/usr/sbin", "/usr/lib", "/usr/lib64", "/proc", "/lib", "/lib64", "/bin", "/usr/bin", "/etc", "/home"}
+	for _, d := range dirs {
+		if err := os.MkdirAll(rootfs+d, 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "mkdir %s: %v\n", d, err)
+			os.Exit(1)
+		}
 	}
 
 	binaries := []string{"/usr/sbin/bash", "/usr/sbin/ls", "/usr/sbin/cat", "/usr/sbin/vim", "/usr/sbin/ps"}
-	requiredFiles := []string{"/etc", "/etc/passwd", "/etc/group", "/etc/hosts", "/etc/hostname", "/home", "/usr/bin/python3.14"}
+	requiredFiles := []string{"/etc/passwd", "/etc/group", "/etc/hosts", "/etc/hostname"}
+
 	copiedLibs := make(map[string]bool)
 
 	for _, req := range requiredFiles {
-		src := req
-		dst := rootfs + req
-		if req == "/home" {
-			if err := os.MkdirAll(dst, 0o755); err != nil {
-				// log("mkdir %s: %v", dst, err)
-			}
-			continue
-		}
-		info, err := os.Stat(src)
-		if err != nil {
-			// log("stat %s: %v", src, err)
-			continue
-		}
-		if info.IsDir() {
-			if err := os.MkdirAll(dst, 0o755); err != nil {
-				// log("mkdir %s: %v", dst, err)
-			}
-		} else {
-			if err := copyFile(src, dst); err != nil {
-				// log("copy %s: %v", src, err)
-			}
+		if err := copyFile(req, rootfs+req); err != nil {
+			fmt.Fprintf(os.Stderr, "copy %s: %v\n", req, err)
 		}
 	}
 
 	for _, bin := range binaries {
-		// log("Copying binary: %s -> %s", bin, rootfs+bin)
 		if err := copyFile(bin, rootfs+bin); err != nil {
-			// log("failed to copy %s: %v", bin, err)
+			fmt.Fprintf(os.Stderr, "copy binary %s: %v\n", bin, err)
 			os.Exit(1)
 		}
 
 		output, err := exec.Command("ldd", bin).Output()
 		if err != nil {
-			// log("ldd failed for %s: %v", bin, err)
-			os.Exit(1)
+			fmt.Fprintf(os.Stderr, "ldd %s: %v\n", bin, err)
+			continue
 		}
 
-		// log("ldd output for %s:\n%s", bin, string(output))
-
-		libs := parseLdd(string(output))
-		// log("Parsed libs for %s: %v", bin, libs)
-		for _, lib := range libs {
+		for _, lib := range parseLdd(string(output)) {
 			if !copiedLibs[lib] {
 				copiedLibs[lib] = true
-				// log("Copying lib: %s -> %s", lib, rootfs+lib)
 				if err := copyFile(lib, rootfs+lib); err != nil {
-					// log("failed to copy %s: %v", lib, err)
-					os.Exit(1)
+					fmt.Fprintf(os.Stderr, "copy lib %s: %v\n", lib, err)
 				}
 			}
 		}
 	}
 
-	if err := os.MkdirAll(rootfs+"/lib", 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create lib: %v\n", err)
-		os.Exit(1)
+	symlinks := map[string]string{
+		rootfs + "/lib":     "usr/lib",
+		rootfs + "/lib64":   "usr/lib64",
+		rootfs + "/bin":     "usr/sbin",
+		rootfs + "/usr/bin": "../usr/sbin",
 	}
-	if err := os.MkdirAll(rootfs+"/lib64", 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to create lib64: %v\n", err)
-		os.Exit(1)
-	}
-
-	os.RemoveAll(rootfs + "/lib")
-	if err := os.Symlink("usr/lib", rootfs+"/lib"); err != nil {
-		// log("symlink lib: %v", err)
-	} else {
-		// log("symlink created: /lib -> usr/lib")
+	for dst, target := range symlinks {
+		os.RemoveAll(dst)
+		if err := os.Symlink(target, dst); err != nil {
+			fmt.Fprintf(os.Stderr, "symlink %s -> %s: %v\n", dst, target, err)
+		}
 	}
 
-	os.RemoveAll(rootfs + "/lib64")
-	if err := os.Symlink("usr/lib64", rootfs+"/lib64"); err != nil {
-		// log("symlink lib64: %v", err)
-	} else {
-		// log("symlink created: /lib64 -> usr/lib64")
+	cmd := exec.Command("/usr/sbin/bash", "--noprofile", "--norc")
+
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	cmd.Dir = "/"
+
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Cloneflags: syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWUTS,
 	}
 
-	os.RemoveAll(rootfs + "/bin")
-	if err := os.Symlink("usr/sbin", rootfs+"/bin"); err != nil {
-		// log("symlink bin: %v", err)
-	} else {
-		// log("symlink created: /bin -> usr/sbin")
+	setup := fmt.Sprintf(`
+		mount -t proc proc /proc || echo "proc mount failed"
+		chroot %s /usr/sbin/bash --noprofile --norc
+	`, rootfs)
+
+	cmd = exec.Command("/usr/sbin/bash", "-c", setup)
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Cloneflags: syscall.CLONE_NEWPID | syscall.CLONE_NEWNS | syscall.CLONE_NEWUTS,
 	}
 
-	os.RemoveAll(rootfs + "/usr/bin")
-	if err := os.Symlink("../usr/sbin", rootfs+"/usr/bin"); err != nil {
-		// log("symlink usr/bin: %v", err)
-	} else {
-		// log("symlink created: /usr/bin -> usr/sbin")
-	}
-
-	if err := syscall.Chroot(rootfs); err != nil {
-		fmt.Fprintf(os.Stderr, "chroot failed: %v\n", err)
-		os.Exit(1)
-	}
-
-	if err := os.Chdir("/"); err != nil {
-		fmt.Fprintf(os.Stderr, "chdir failed: %v\n", err)
-		os.Exit(1)
-	}
-
-	// testCmd := exec.Command("/usr/sbin/ls", "-la", ".")
-	// testCmd.Stdin = os.Stdin
-	// testCmd.Stdout = os.Stdout
-	// testCmd.Stderr = os.Stderr
-
-	// log("Testing ls inside chroot...")
-	// if err := testCmd.Run(); err != nil {
-	// 	// log("ls test failed: %v", err)
-	// 	if exitErr, ok := err.(*exec.ExitError); ok {
-	// 		// log("ls stderr: %s", string(exitErr.Stderr))
-	// 		fmt.Fprintf(os.Stderr, "ls test failed: %v\n", exitErr)
-	// 	}
-	// }
-
-	cmd := exec.Command("/usr/sbin/bash")
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 
+	fmt.Println("Starting container (bash should be PID 1 inside)...")
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "command failed: %v\n", err)
+		fmt.Fprintf(os.Stderr, "container failed: %v\n", err)
 		if exitErr, ok := err.(*exec.ExitError); ok {
-			fmt.Fprintf(os.Stderr, "stderr: %s\n", string(exitErr.Stderr))
+			fmt.Fprintf(os.Stderr, "exit status: %d\n", exitErr.ExitCode())
 		}
 		os.Exit(1)
 	}
 }
 
 func copyFile(src, dst string) error {
-	// log("copyFile: %s -> %s", src, dst)
-
 	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-		return fmt.Errorf("mkdir failed: %v", err)
+		return err
 	}
-
 	srcFile, err := os.Open(src)
 	if err != nil {
-		return fmt.Errorf("open src: %v", err)
+		return err
 	}
 	defer srcFile.Close()
 
 	dstFile, err := os.Create(dst)
 	if err != nil {
-		return fmt.Errorf("create dst: %v", err)
+		return err
 	}
 	defer dstFile.Close()
 
 	if _, err := io.Copy(dstFile, srcFile); err != nil {
-		return fmt.Errorf("copy: %v", err)
+		return err
 	}
 
-	srcInfo, err := srcFile.Stat()
-	if err != nil {
-		return fmt.Errorf("stat: %v", err)
+	if info, err := srcFile.Stat(); err == nil {
+		os.Chmod(dst, info.Mode())
 	}
-
-	if err := os.Chmod(dst, srcInfo.Mode()); err != nil {
-		return fmt.Errorf("chmod: %v", err)
-	}
-
-	// log("copyFile success: %s", dst)
 	return nil
 }
-
-// func log(format string, args ...interface{}) {
-// 	fmt.Println(fmt.Sprintf(format, args...))
-// }
 
 func parseLdd(output string) []string {
 	lines := strings.Split(output, "\n")
 	libs := []string{}
-
 	for _, line := range lines {
-		parts := strings.Split(line, "=>")
-		if len(parts) != 2 {
-			continue
-		}
-
-		path := strings.TrimSpace(strings.Split(parts[1], "(")[0])
-		if strings.HasPrefix(path, "/") {
-			libs = append(libs, path)
+		if idx := strings.Index(line, "=>"); idx != -1 {
+			part := strings.TrimSpace(strings.Split(line[idx+2:], "(")[0])
+			if strings.HasPrefix(part, "/") {
+				libs = append(libs, part)
+			}
 		}
 	}
-
 	return libs
 }
