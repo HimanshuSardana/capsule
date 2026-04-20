@@ -52,7 +52,20 @@ func RunChild(rootfs string) error {
 	}
 	defer cleanupMounts()
 
-	os.Setenv("PATH", "/bin:/usr/bin:/sbin:/usr/sbin")(rootfs, codeFile, stdinFile string) error {
+	os.Setenv("PATH", "/bin:/usr/bin:/sbin:/usr/sbin")
+
+	if err := writeResolvConf(); err != nil {
+		fmt.Printf("Error setting resolv.conf: %v\n", err)
+	}
+
+	cmd := exec.Command("/bin/busybox", "sh")
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	return cmd.Run()
+}
+
+func RunCode(rootfs, codeFile, stdinFile string) error {
 	inContainerStdin := strings.TrimPrefix(stdinFile, rootfs)
 
 	if err := syscall.Chroot(rootfs); err != nil {
