@@ -109,6 +109,10 @@ func runCode(req RunRequest) (*RunResponse, error) {
 	}
 
 	fmt.Fprintf(os.Stderr, "[DEBUG] subDir=%s codeFile=%s stdinFile=%s\n", subDir, codeFile, stdinFile)
+
+	stdinData, _ := os.ReadFile(stdinFile)
+	fmt.Fprintf(os.Stderr, "[DEBUG] stdin content: %q\n", string(stdinData))
+
 	exitCode, stdout, stderr := executeInContainer(subDir, codeFile, stdinFile)
 	fmt.Fprintf(os.Stderr, "[DEBUG] exitCode=%d stdout=%q stderr=%q\n", exitCode, stdout, stderr)
 
@@ -141,6 +145,5 @@ func executeInContainer(rootfs, codeFile, stdinFile string) (int, string, string
 		return -1, stdout.String(), fmt.Sprintf("run: %v", err)
 	}
 
-	cmd.Wait()
 	return cmd.ProcessState.ExitCode(), stdout.String(), stderr.String()
 }

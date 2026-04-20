@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -63,6 +64,44 @@ func RunChild(rootfs string) error {
 	return cmd.Run()
 }
 
+func RunCode(rootfs, codeFile, stdinFile string) error {
+	inContainerStdin := strings.TrimPrefix(stdinFile, rootfs)
+
+	if err := syscall.Chroot(rootfs); err != nil {
+		return fmt.Errorf("chroot failed: %w", err)
+	}
+
+	if err := syscall.Sethostname([]byte("capsule")); err != nil {
+		return fmt.Errorf("sethostname failed: %w", err)
+	}
+
+	if err := os.Chdir("/"); err != nil {
+		return fmt.Errorf("chdir / failed: %w", err)
+	}
+
+	if err := setupMounts(); err != nil {
+		return err
+	}
+
+	os.Setenv("PATH", "/bin:/usr/bin:/sbin:/usr/sbin")
+
+	fmt.Fprintf(os.Stderr, "[RUN-CODE] stdinFile=%s codeFile=%s\n", stdinFile, codeFile)
+	cmd := exec.Command("python3", codeFile)
+
+	if inContainerStdin != "" {
+		f, err := os.Open(inContainerStdin)
+		if err == nil {
+			cmd.Stdin = f
+			defer f.Close()
+		}
+	}
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	return cmd.Run()
+}
+
 func setupMounts() error {
 	syscall.Mount("", "", "", uintptr(syscall.MS_PRIVATE|syscall.MS_REC), "")
 
@@ -79,6 +118,16 @@ func setupMounts() error {
 	if err := syscall.Mount("devpts", "/dev/pts", "devpts", 0, ""); err != nil {
 		return fmt.Errorf("mount /dev/pts: %w", err)
 	}
+
+	// Create /dev/null if it doesn't exist
+	if err := os.MkdirAll("/dev", 0o755); err != nil {
+		return fmt.Errorf("mkdir /dev: %w", err)
+	}
+	nullFile, err := os.OpenFile("/dev/null", os.O_CREATE|os.O_RDWR, 0o666)
+	if err != nil {
+		return fmt.Errorf("create /dev/null: %w", err)
+	}
+	nullFile.Close()
 
 	return nil
 }
