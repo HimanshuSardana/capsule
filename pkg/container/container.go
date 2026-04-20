@@ -50,21 +50,9 @@ func RunChild(rootfs string) error {
 	if err := setupMounts(); err != nil {
 		return err
 	}
+	defer cleanupMounts()
 
-	os.Setenv("PATH", "/bin:/usr/bin:/sbin:/usr/sbin")
-
-	if err := writeResolvConf(); err != nil {
-		fmt.Printf("Error setting resolv.conf: %v\n", err)
-	}
-
-	cmd := exec.Command("/bin/busybox", "sh")
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
-}
-
-func RunCode(rootfs, codeFile, stdinFile string) error {
+	os.Setenv("PATH", "/bin:/usr/bin:/sbin:/usr/sbin")(rootfs, codeFile, stdinFile string) error {
 	inContainerStdin := strings.TrimPrefix(stdinFile, rootfs)
 
 	if err := syscall.Chroot(rootfs); err != nil {
@@ -82,10 +70,9 @@ func RunCode(rootfs, codeFile, stdinFile string) error {
 	if err := setupMounts(); err != nil {
 		return err
 	}
+	defer cleanupMounts()
 
 	os.Setenv("PATH", "/bin:/usr/bin:/sbin:/usr/sbin")
-
-	fmt.Fprintf(os.Stderr, "[RUN-CODE] stdinFile=%s codeFile=%s\n", stdinFile, codeFile)
 	cmd := exec.Command("python3", codeFile)
 
 	if inContainerStdin != "" {
@@ -119,7 +106,6 @@ func setupMounts() error {
 		return fmt.Errorf("mount /dev/pts: %w", err)
 	}
 
-	// Create /dev/null if it doesn't exist
 	if err := os.MkdirAll("/dev", 0o755); err != nil {
 		return fmt.Errorf("mkdir /dev: %w", err)
 	}
@@ -130,6 +116,12 @@ func setupMounts() error {
 	nullFile.Close()
 
 	return nil
+}
+
+func cleanupMounts() {
+	syscall.Unmount("/proc", 0)
+	syscall.Unmount("/dev/pts", 0)
+	syscall.Unmount("/dev/null", 0)
 }
 
 func writeResolvConf() error {
