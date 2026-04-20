@@ -46,6 +46,10 @@ func GetImage(name string, imagesPath string) (Image, error) {
 }
 
 func Download(url, path string) error {
+	if IsFileURL(url) {
+		return copyFile(url, path)
+	}
+
 	resp, err := http.Get(url)
 	if err != nil {
 		return err
@@ -67,6 +71,37 @@ func Download(url, path string) error {
 	defer out.Close()
 
 	_, err = io.Copy(out, resp.Body)
+	return err
+}
+
+func IsFileURL(url string) bool {
+	return filepath.IsAbs(url) || string(url[0]) == "/" || string(url[0]) == "."
+}
+
+func copyFile(src, dst string) error {
+	src = filepath.Clean(src)
+	if !filepath.IsAbs(src) {
+		abs, _ := filepath.Abs(src)
+		src = abs
+	}
+
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return err
+	}
+
+	input, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer input.Close()
+
+	output, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer output.Close()
+
+	_, err = io.Copy(output, input)
 	return err
 }
 
