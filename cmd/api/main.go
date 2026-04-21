@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"math/rand"
@@ -9,7 +8,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"syscall"
 	"time"
 
 	"github.com/HimanshuSardana/capsule/pkg/container"
@@ -28,16 +26,8 @@ type RunResponse struct {
 }
 
 func main() {
-	if len(os.Args) > 1 && os.Args[1] == "child" {
-		if err := container.RunCode(os.Args[2], os.Args[3], os.Args[4]); err != nil {
-			fmt.Printf("Error: %v\n", err)
-			os.Exit(1)
-		}
-		return
-	}
-
-	http.HandleFunc("/run", handleRun)
-	http.HandleFunc("/health", handleHealth)
+	http.HandleFunc("/run", corsMiddleware(handleRun))
+	http.HandleFunc("/health", corsMiddleware(handleHealth))
 
 	fmt.Println("Starting API server on :8080...")
 	if err := http.ListenAndServe(":8080", nil); err != nil {
@@ -48,6 +38,18 @@ func main() {
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte("OK"))
+}
+
+func corsMiddleware(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Access-Control-Allow-Origin", "*")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		if r.Method == http.MethodOptions {
+			return
+		}
+		next.ServeHTTP(w, r)
+	}
 }
 
 func handleRun(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +115,7 @@ func runCode(req RunRequest) (*RunResponse, error) {
 	stdinData, _ := os.ReadFile(stdinFile)
 	fmt.Fprintf(os.Stderr, "[DEBUG] stdin content: %q\n", string(stdinData))
 
-	exitCode, stdout, stderr := executeInContainer(subDir, codeFile, stdinFile)
+	exitCode, stdout, stderr := container.ExecuteInSandbox(subDir, codeFile, stdinFile)
 	fmt.Fprintf(os.Stderr, "[DEBUG] exitCode=%d stdout=%q stderr=%q\n", exitCode, stdout, stderr)
 
 	os.RemoveAll(subDir)
@@ -128,22 +130,4 @@ func runCode(req RunRequest) (*RunResponse, error) {
 func extractImage(imgPath, dest string) error {
 	cmd := exec.Command("tar", "-xzf", imgPath, "-C", dest)
 	return cmd.Run()
-}
-
-func executeInContainer(rootfs, codeFile, stdinFile string) (int, string, string) {
-	binaryPath, _ := os.Executable()
-	cmd := exec.Command(binaryPath, "child", rootfs, codeFile, stdinFile)
-	cmd.SysProcAttr = &syscall.SysProcAttr{
-		Cloneflags: syscall.CLONE_NEWPID | syscall.CLONE_NEWUTS | syscall.CLONE_NEWNS,
-	}
-
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
-
-	if err := cmd.Run(); err != nil {
-		return -1, stdout.String(), fmt.Sprintf("run: %v", err)
-	}
-
-	return cmd.ProcessState.ExitCode(), stdout.String(), stderr.String()
 }
