@@ -1,0 +1,576 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>capsule.</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #0a0a0a;
+        --bg-secondary: #171717;
+        --border: #262626;
+        --border-hover: #525252;
+        --text: #e5e5e5;
+        --text-muted: #a3a3a3;
+        --text-dim: #737373;
+        --highlight: #e5e5e5;
+        --danger: #f87171;
+        --success: #10b981;
+        --font-sans:
+          "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Helvetica, Arial, sans-serif;
+        --font-mono: SFMono-Regular, "JetBrains Mono", Consolas, monospace;
+        --radius: 8px;
+        --transition: all 0.3s ease-out;
+      }
+
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--font-sans);
+        font-size: 14px;
+        min-height: 100vh;
+        position: relative;
+        overflow-x: hidden;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .bg-pattern {
+        position: absolute;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+        background: radial-gradient(
+          circle at center,
+          rgba(23, 23, 23, 0.4),
+          var(--bg) 60%
+        );
+      }
+
+      .container {
+        position: relative;
+        z-index: 10;
+        width: 100%;
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 64px 24px;
+      }
+
+      .layout-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 48px;
+      }
+
+      @media (min-width: 1024px) {
+        .layout-grid {
+          grid-template-columns: 1fr 1fr;
+          gap: 80px;
+          align-items: start;
+        }
+      }
+
+      /* LEFT PANEL */
+      .left-panel {
+        display: flex;
+        flex-direction: column;
+        gap: 40px;
+        padding-top: 40px;
+      }
+
+      header {
+        display: flex;
+        flex-direction: column;
+        gap: 16px;
+      }
+
+      header h1 {
+        font-size: 40px;
+        font-weight: 700;
+        letter-spacing: -0.025em;
+        color: #fff;
+      }
+
+      @media (min-width: 768px) {
+        header h1 {
+          font-size: 60px;
+        }
+      }
+
+      .text-dim {
+        color: var(--text-dim);
+      }
+
+      header h2 {
+        font-size: 18px;
+        font-weight: 500;
+        color: var(--text-dim);
+        line-height: 1.6;
+        max-width: 500px;
+      }
+
+      .highlight {
+        color: var(--text);
+        text-decoration: underline;
+        text-decoration-color: var(--text-dim);
+        text-underline-offset: 4px;
+        text-decoration-thickness: 1px;
+      }
+
+      /* FORM */
+      .code-form {
+        display: flex;
+        flex-direction: column;
+        gap: 32px;
+      }
+
+      .input-group {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+      }
+
+      .input-group label {
+        text-transform: lowercase;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-dim);
+      }
+
+      .input-group select {
+        background: transparent;
+        border: none;
+        border-bottom: 1px solid var(--border);
+        padding: 8px 0;
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 14px;
+        transition: var(--transition);
+        outline: none;
+        cursor: pointer;
+        width: fit-content;
+      }
+
+      .input-group select:focus {
+        border-color: var(--border-hover);
+      }
+
+      .input-group select option {
+        background: var(--bg);
+        color: var(--text);
+      }
+
+      .code-area,
+      .stdin-area {
+        width: 100%;
+        background: transparent;
+        border: none;
+        border-bottom: 1px solid var(--border);
+        padding: 8px 0;
+        color: var(--text);
+        font-family: var(--font-mono);
+        font-size: 13px;
+        line-height: 1.6;
+        resize: vertical;
+        outline: none;
+        transition: var(--transition);
+        min-height: 50px;
+      }
+
+      .code-area {
+        min-height: 280px;
+      }
+
+      .code-area:focus,
+      .stdin-area:focus {
+        border-color: var(--border-hover);
+      }
+
+      .code-area::placeholder,
+      .stdin-area::placeholder {
+        color: #404040;
+      }
+
+      .form-actions {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 16px;
+      }
+
+      .run-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 12px 24px;
+        font-size: 14px;
+        font-weight: 500;
+        font-family: var(--font-sans);
+        color: #000;
+        background: var(--text);
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: var(--transition);
+      }
+
+      .run-btn:hover {
+        background: #fff;
+      }
+
+      .run-btn:disabled,
+      .run-btn.running {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .spinner {
+        width: 13px;
+        height: 13px;
+        border: 2px solid rgba(0, 0, 0, 0.3);
+        border-top-color: transparent;
+        border-radius: 50%;
+        animation: spin 0.7s linear infinite;
+        display: none;
+      }
+
+      .run-btn.running .spinner {
+        display: inline-block;
+      }
+
+      @keyframes spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* RIGHT PANEL */
+      .right-panel {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+      }
+
+      @media (min-width: 1024px) {
+        .right-panel {
+          padding-top: 80px;
+        }
+      }
+
+      .output-section {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        position: sticky;
+        top: 32px;
+      }
+
+      .output-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--border);
+      }
+
+      .output-title {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        color: #d4d4d4;
+      }
+
+      .output-title span {
+        font-weight: 500;
+        font-size: 14px;
+        text-transform: lowercase;
+      }
+
+      .output-meta-bar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 12px;
+        font-family: var(--font-mono);
+        color: var(--text-dim);
+      }
+
+      .status-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--text-dim);
+        display: inline-block;
+      }
+
+      .status-dot.success {
+        background: var(--success);
+        box-shadow: 0 0 6px var(--success);
+      }
+      .status-dot.error {
+        background: var(--danger);
+        box-shadow: 0 0 6px var(--danger);
+      }
+
+      .output-body-wrapper {
+        background: rgba(10, 10, 10, 0.5);
+        border: 1px solid var(--bg-secondary);
+        border-radius: var(--radius);
+        overflow: hidden;
+      }
+
+      .output-body {
+        padding: 16px;
+        font-size: 13px;
+        font-family: var(--font-mono);
+        min-height: 120px;
+        line-height: 1.6;
+      }
+
+      .output-body pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      .stdout {
+        color: var(--text);
+      }
+      .stderr {
+        color: var(--danger);
+      }
+
+      .empty-output {
+        color: var(--text-dim);
+        font-style: italic;
+        font-size: 13px;
+        font-family: var(--font-mono);
+      }
+
+      .output-footer {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 16px;
+        border-top: 1px solid var(--bg-secondary);
+        font-size: 11px;
+        font-family: var(--font-mono);
+        color: var(--text-dim);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bg-pattern"></div>
+
+    <main class="container">
+      <div class="layout-grid">
+        <!-- Left: Form -->
+        <div class="left-panel">
+          <header>
+            <h1>capsule<span class="text-dim">.</span></h1>
+            <h2>
+              a minimal code judge. write code, provide input, get
+              <span class="highlight">instant output</span>.
+            </h2>
+          </header>
+
+          <form class="code-form" id="code-form">
+            <div class="input-group">
+              <label>language</label>
+              <select id="language">
+                <option value="python">python</option>
+              </select>
+            </div>
+
+            <div class="input-group">
+              <label>source code</label>
+              <textarea
+                class="code-area"
+                id="code"
+                placeholder="# type your code here..."
+                spellcheck="false"
+              >
+name = input()
+print(f'Hello, {name}!')</textarea
+              >
+            </div>
+
+            <div class="input-group">
+              <label>stdin</label>
+              <textarea
+                class="stdin-area"
+                id="stdin"
+                placeholder="input data..."
+                spellcheck="false"
+              >
+Alice</textarea
+              >
+            </div>
+
+            <div class="form-actions">
+              <button type="submit" class="run-btn" id="runBtn">
+                <div class="spinner"></div>
+                <span class="btn-text">run</span>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                </svg>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Right: Output -->
+        <div class="right-panel">
+          <section class="output-section">
+            <div class="output-header">
+              <div class="output-title">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                >
+                  <polyline points="4 17 10 11 4 5"></polyline>
+                  <line x1="12" y1="19" x2="20" y2="19"></line>
+                </svg>
+                <span>output.</span>
+              </div>
+              <div class="output-meta-bar">
+                <span class="status-dot" id="statusDot"></span>
+                <span id="statusText">ready</span>
+              </div>
+            </div>
+
+            <div class="output-body-wrapper">
+              <div class="output-body" id="outputBody">
+                <span class="empty-output">press run to execute your code</span>
+              </div>
+              <div class="output-footer">
+                <span id="exitCode">exit code: --</span>
+                <span id="execTime"></span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <script>
+      const codeEl = document.getElementById("code");
+      const stdinEl = document.getElementById("stdin");
+      const runBtn = document.getElementById("runBtn");
+      const outputBody = document.getElementById("outputBody");
+      const exitCodeEl = document.getElementById("exitCode");
+      const statusText = document.getElementById("statusText");
+      const statusDot = document.getElementById("statusDot");
+      const execTimeEl = document.getElementById("execTime");
+
+      codeEl.addEventListener("keydown", (e) => {
+        if (e.key === "Tab") {
+          e.preventDefault();
+          const start = codeEl.selectionStart;
+          const end = codeEl.selectionEnd;
+          codeEl.value =
+            codeEl.value.substring(0, start) +
+            "    " +
+            codeEl.value.substring(end);
+          codeEl.selectionStart = codeEl.selectionEnd = start + 4;
+        }
+      });
+
+      document
+        .getElementById("code-form")
+        .addEventListener("submit", async (e) => {
+          e.preventDefault();
+          await runCode();
+        });
+
+      async function runCode() {
+        if (runBtn.classList.contains("running")) return;
+
+        const code = codeEl.value;
+        const stdin = stdinEl.value;
+        const language = document.getElementById("language").value;
+
+        runBtn.classList.add("running");
+        outputBody.innerHTML = '<span class="empty-output">running...</span>';
+        exitCodeEl.textContent = "exit code: --";
+        execTimeEl.textContent = "";
+        statusText.textContent = "running";
+        statusDot.className = "status-dot";
+
+        const t0 = performance.now();
+
+        try {
+          const res = await fetch("http://localhost:8080/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ language, code, stdin }),
+          });
+
+          const data = await res.json();
+          const elapsed = ((performance.now() - t0) / 1000).toFixed(2);
+
+          let html = "";
+          if (data.stdout)
+            html += `<pre class="stdout">${escapeHtml(data.stdout)}</pre>`;
+          if (data.stderr)
+            html += `<pre class="stderr">${escapeHtml(data.stderr)}</pre>`;
+          if (!data.stdout && !data.stderr)
+            html = '<span class="empty-output">(no output)</span>';
+
+          outputBody.innerHTML = html;
+          exitCodeEl.textContent = `exit code: ${data.exit_code}`;
+          execTimeEl.textContent = `${elapsed}s`;
+
+          if (data.exit_code === 0 && !data.stderr) {
+            statusText.textContent = "success";
+            statusDot.className = "status-dot success";
+          } else {
+            statusText.textContent = "error";
+            statusDot.className = "status-dot error";
+          }
+        } catch (err) {
+          outputBody.innerHTML = `<pre class="stderr">${escapeHtml(err.message)}</pre>`;
+          exitCodeEl.textContent = "exit code: --";
+          statusText.textContent = "failed";
+          statusDot.className = "status-dot error";
+        } finally {
+          runBtn.classList.remove("running");
+        }
+      }
+
+      function escapeHtml(str) {
+        return str
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;");
+      }
+    </script>
+  </body>
+</html>
