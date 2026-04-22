@@ -6,5 +6,17 @@
   {
     "name": "base-python",
     "url": "/home/himanshu/personal/projects/capsule/images/python.tar.gz"
+  },
+  {
+    "name": "base-cpp",
+    "url": "/home/himanshu/personal/projects/capsule/images/cpp.tar.gz"
+  },
+  {
+    "name": "base-js",
+    "url": "/home/himanshu/personal/projects/capsule/images/js.tar.gz"
+  },
+  {
+    "name": "base-rust",
+    "url": "/home/himanshu/personal/projects/capsule/images/rust.tar.gz"
   }
 ]
